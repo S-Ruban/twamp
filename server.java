@@ -23,50 +23,7 @@ public class server
 	
 	server(int port) throws IOException
 	{
-		try
-		{
-			server = new ServerSocket(port);
-			System.out.println("Waiting for client.");
-			socket = server.accept();
-			System.out.println("Client is online.\n\n");
-			in = new DataInputStream(socket.getInputStream());
-			out = new DataOutputStream(socket.getOutputStream());
-			while(true)
-			{
-				in.read(header);
-				if((header[13]&0x01) != 1)
-				{
-					receive();
-					pause(1000);
-					display();
-					if(SYN && !ACK)
-					{
-						ACK = true ;
-						header[13] |= 0x10 ;
-						ack = seq + 1 ;
-						seq = rand.nextInt(Integer.MAX_VALUE);
-						header_mod(seq, 4, 7);
-						header_mod(ack, 8, 11);
-						checksum = calculate_checksum();
-						header_mod(checksum, 14, 17);
-					}
-					if(!SYN && ACK)
-					{
-						ACK = false ;
-						if(checksum == calculate_checksum())
-							System.out.println("TCP connection established.");
-						header[13] &= ~0x10 ;
-					}
-					pause(1000);
-					out.write(header);
-				}
-			}
-		}
-		catch(IOException ioe)
-		{
-			System.out.println("\nClient has disconnected.\n\n");
-		}
-		
+		start(port);
 	}
 	
 	int bytearr_to_int(int s, int e)
@@ -175,9 +132,94 @@ public class server
 		}
 	}
 	
+	void start(int p)
+	{
+		try
+		{
+			server = new ServerSocket(p);
+			System.out.println("Waiting for client.");
+			socket = server.accept();
+			System.out.println("Client is online.\n\n");
+			in = new DataInputStream(socket.getInputStream());
+			out = new DataOutputStream(socket.getOutputStream());
+			while(true)
+			{
+				in.read(header);
+				if((header[13]&0x01) != 1)
+				{
+					receive();
+					pause(1000);
+					display();
+					if(SYN && !ACK)
+					{
+						ACK = true ;
+						header[13] |= 0x10 ;
+						ack = seq + 1 ;
+						seq = rand.nextInt(Integer.MAX_VALUE);
+						header_mod(seq, 4, 7);
+						header_mod(ack, 8, 11);
+						checksum = calculate_checksum();
+						header_mod(checksum, 14, 17);
+					}
+					if(!SYN && ACK)
+					{
+						ACK = false ;
+						if(checksum == calculate_checksum())
+						{
+							pause(1000);
+							System.out.println("TCP connection established.\n\n");
+						}
+						header[13] &= ~0x10 ;
+						break ;
+					}
+					pause(1000);
+					out.write(header);
+				}
+			}
+		}
+		catch(IOException ioe)
+		{
+			System.out.println("\nClient has disconnected.\n\n");
+		}
+	}
+	
+	void end()
+	{
+		try
+		{
+			while(true)
+			{
+				in.read(header);
+				if(((header[13]&0x04) >> 2) != 1)
+				{
+					receive();
+					pause(1000);
+					display();
+					header[13] |= 0x11 ;
+					checksum = calculate_checksum();
+					header_mod(checksum, 14, 17);
+					pause(1000);
+					out.write(header);
+					if(ACK)
+					{
+						System.out.println("TCP connection terminated.");
+						socket.close();
+						server.close();
+						break ;
+					}
+				}
+			}
+		}
+		catch(IOException ioe)
+		{
+			System.out.println("\nClient has disconnected.\n\n");
+		}
+	}
+	
 	public static void main(String[] args) throws IOException
 	{
-		new server(832);
+		server s = new server(832);
+		s.end();
 		int i = sc.nextInt();
 	}
 }
