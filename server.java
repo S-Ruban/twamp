@@ -5,46 +5,47 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.util.Scanner;
+import java.util.Vector;
 import java.util.Random;
 
 public class server
 {
-	Socket socket = null ;
-	ServerSocket server = null ;
-	DataInputStream in = null ;
-	DataOutputStream out = null ;
-	Random rand = new Random();
+	static Socket socket = null ;
+	static ServerSocket server = null ;
+	static DataInputStream in = null ;
+	static DataOutputStream out = null ;
+	static Random random = new Random();
 	static Scanner sc = new Scanner(System.in);
 	
-	Boolean URG, ACK, PSH, RST, SYN, FIN ;
-	int src_port, dest_port, seq, ack, HLEN, win_size, checksum, urg_ptr ;
+	static Boolean URG, ACK, PSH, RST, SYN, FIN ;
+	static int src_port, dest_port, seq, ack, HLEN, win_size, checksum, urg_ptr ;
 	
-	byte [] header = new byte[20];
+	static byte [] header = new byte[20];
 	
 	server(int port) throws IOException
 	{
 		start(port);
 	}
 	
-	int bytearr_to_int(int s, int e)
+	static int bytearr_to_int(byte arr[], int s, int e)
 	{
 		int res = 0 ;
 		for(int i = s; i <= e; i++)
 		{
 			if((int)header[i] >= 0)
-				res = res*256 + (int)header[i];
+				res = res*256 + (int)arr[i];
 			else
-				res = res*256 + (int)header[i] + 256 ;
+				res = res*256 + (int)arr[i] + 256 ;
 		}
 		return res ;
 	}
 	
-	void receive()
+	static void receive()
 	{
-		src_port = bytearr_to_int(0,1);
-		dest_port = bytearr_to_int(2,3);
-		seq = bytearr_to_int(4,7);
-		ack = bytearr_to_int(8,11);
+		src_port = bytearr_to_int(header, 0,1);
+		dest_port = bytearr_to_int(header, 2,3);
+		seq = bytearr_to_int(header, 4,7);
+		ack = bytearr_to_int(header, 8,11);
 		HLEN = (int)(header[12]>>2);
 		if((header[13]&0x20)>>5 == 1)
 			URG = true ;
@@ -70,12 +71,12 @@ public class server
 			FIN = true ;
 		else
 			FIN = false ;
-		win_size = bytearr_to_int(14,15);
-		checksum = bytearr_to_int(16,17);
-		urg_ptr = bytearr_to_int(18,19);
+		win_size = bytearr_to_int(header, 14,15);
+		checksum = bytearr_to_int(header, 16,17);
+		urg_ptr = bytearr_to_int(header, 18,19);
 	}
 	
-	int calculate_checksum()
+	static int calculate_checksum()
 	{
 		int cs = 0 ;
 		for(int x = 0; x < 20; x += 2)
@@ -83,22 +84,22 @@ public class server
 			if(x == 16)
 				continue ;
 			else
-				cs += (65535-bytearr_to_int(x, x+1));
+				cs += (65535-bytearr_to_int(header, x, x+1));
 		}
 		cs = (~cs) & 0xffff ;
 		return cs ;
 	}
 	
-	void header_mod(int val, int s, int e)
+	static void bytearrmod(byte [] arr, int val, int s, int e)
 	{
 		ByteBuffer bb = ByteBuffer.allocate(e-s+1);
 		bb.putInt(val);
 		byte[] temp = bb.array();
 		for(int i = 0; i <= e-s; i++)
-			header[i+s] = temp[i];
+			arr[i+s] = temp[i];
 	}
 	
-	void display()
+	static void display()
 	{
 		System.out.println("Source port : " + src_port);
 		System.out.println("Destination port : " + dest_port);
@@ -120,7 +121,7 @@ public class server
 			System.out.println("Checksums do not match.\n\n");
 	}
 	
-	void pause(int ms)
+	static void pause(int ms)
 	{
 		try
 		{
@@ -132,7 +133,7 @@ public class server
 		}
 	}
 	
-	void start(int p)
+	static void start(int p)
 	{
 		try
 		{
@@ -155,20 +156,20 @@ public class server
 						ACK = true ;
 						header[13] |= 0x10 ;
 						ack = seq + 1 ;
-						seq = rand.nextInt(Integer.MAX_VALUE);
-						header_mod(seq, 4, 7);
-						header_mod(ack, 8, 11);
+						seq = random.nextInt(Integer.MAX_VALUE);
+						bytearrmod(header, seq, 4, 7);
+						bytearrmod(header, ack, 8, 11);
 						checksum = calculate_checksum();
-						header_mod(checksum, 14, 17);
+						bytearrmod(header, checksum, 14, 17);
 					}
 					if(!SYN && ACK)
 					{
-						ACK = false ;
 						if(checksum == calculate_checksum())
 						{
 							pause(1000);
 							System.out.println("TCP connection established.\n\n");
 						}
+						ACK = false ;
 						header[13] &= ~0x10 ;
 						break ;
 					}
@@ -183,7 +184,7 @@ public class server
 		}
 	}
 	
-	void end()
+	static void end()
 	{
 		try
 		{
@@ -197,7 +198,7 @@ public class server
 					display();
 					header[13] |= 0x11 ;
 					checksum = calculate_checksum();
-					header_mod(checksum, 14, 17);
+					bytearrmod(header, checksum, 14, 17);
 					pause(1000);
 					out.write(header);
 					if(ACK)
@@ -218,8 +219,34 @@ public class server
 	
 	public static void main(String[] args) throws IOException
 	{
-		server s = new server(832);
-		s.end();
+		server s = new server(862);
+//		s.end();
+		byte [] server_greeting = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,								// unused, so leave it
+								   0x00, 0x00, 0x00, 0x01,																				// 1 for unauthenticated, 2 for authenticated, and 4 for encrypted
+								   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,		// challenge, random number
+								   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,		// salt, psuedo-random
+								   0x00, 0x00, 0x04, 0x00,																				// count, must atleast be 1024
+								   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};								// MBZ
+		byte [] challenge = new byte[16];
+		byte [] salt = new byte[16];
+		random.nextBytes(challenge);
+		random.nextBytes(salt);
+		for(int i = 0; i < challenge.length; i++)
+		{
+			server_greeting[i+16] = challenge[i];
+			server_greeting[i+32] = salt[i];
+		}
+		byte [] server_greeting_message = new byte[header.length+server_greeting.length];
+		header[13] &= ~0x10 ;
+		checksum = calculate_checksum();
+		bytearrmod(header, checksum, 14, 17);
+		for(int i = 0; i < header.length; i++)
+			server_greeting_message[i] = header[i];
+		for(int i = 0; i < server_greeting.length; i++)
+			server_greeting_message[header.length+i] = server_greeting[i];
+		bytearrmod(server_greeting_message, checksum, 14, 17);
+		out.write(server_greeting_message);
+		System.out.println(checksum);
 		int i = sc.nextInt();
 	}
 }
