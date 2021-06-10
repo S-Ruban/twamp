@@ -8,56 +8,56 @@ import java.util.Random;
 
 public class client
 {
-	Socket socket = null;
-	DataInputStream in = null;
-	DataOutputStream out = null;
+	static Socket socket = null;
+	static DataInputStream in = null;
+	static DataOutputStream out = null;
 	static Scanner sc = new Scanner(System.in);
-	Random rand = new Random();
+	static Random random = new Random();
 	
-	Boolean URG = false, ACK = false, PSH = false, RST = false, SYN = true, FIN = false ;
-	int src_port = 832, dest_port = 832, seq = rand.nextInt(Integer.MAX_VALUE), ack = 0, HLEN = 5, win_size = 0, checksum = 0, urg_ptr = 0, TIME_WAIT = 5000 ;
+	static Boolean URG = false, ACK = false, PSH = false, RST = false, SYN = true, FIN = false ;
+	static int src_port = 862, dest_port = 862, seq = random.nextInt(Integer.MAX_VALUE), ack = 0, HLEN = 5, win_size = 0, checksum = 0, urg_ptr = 0, TIME_WAIT = 5000 ;
 	
-	byte [] header = {0x03, 0x40,				// source port
-					  0x03, 0x40,				// dest port
-					  0x00, 0x00, 0x00, 0x00,	// seq no.
-					  0x00, 0x00, 0x00, 0x00,	// ack no.
-					  0x50,						// first nibble is HLEN, second nibble is 4/6 reserved bits which are all 0
-					  0x02,						// first nibble lies between 0 and 3 based on URG and ACK, second nibble depends on PSH, RST, SYN and FIN
-					  0x00, 0x00,				// window size
-					  0x00, 0x00,				// checksum
-					  0x00, 0x00};				// urgent pointer
+	static byte [] header = {0x03, 0x5e,				// source port
+					  		 0x03, 0x5e,				// dest port
+					  		 0x00, 0x00, 0x00, 0x00,	// seq no.
+					  		 0x00, 0x00, 0x00, 0x00,	// ack no.
+					  		 0x50,						// first nibble is HLEN, second nibble is 4/6 reserved bits which are all 0
+					  		 0x02,						// first nibble lies between 0 and 3 based on URG and ACK, second nibble depends on PSH, RST, SYN and FIN
+					  		 0x00, 0x00,				// window size
+					  		 0x00, 0x00,				// checksum
+					  		 0x00, 0x00};				// urgent pointer
 
 	client(String ip, int port)
 	{
 		start(ip, port);
 	}
 	
-	void header_mod(int val, int s, int e)
+	static void bytearrmod(byte [] arr, int val, int s, int e)
 	{
 		ByteBuffer bb = ByteBuffer.allocate(e-s+1);
 		bb.putInt(val);
 		byte[] temp = bb.array();
 		for(int i = 0; i <= e-s; i++)
-			header[i+s] = temp[i];
+			arr[i+s] = temp[i];
 	}
 	
-	int bytearr_to_int(int s, int e)
+	static int bytearr_to_int(byte arr[], int s, int e)
 	{
 		int res = 0 ;
 		for(int i = s; i <= e; i++)
 		{
 			if((int)header[i] >= 0)
-				res = res*256 + (int)header[i];
+				res = res*256 + (int)arr[i];
 			else
-				res = res*256 + (int)header[i] + 256 ;
+				res = res*256 + (int)arr[i] + 256 ;
 		}
 		return res ;
 	}
 	
-	void header()
+	static void header()
 	{
-		header_mod(seq, 4, 7);
-		header_mod(ack, 8, 11);
+		bytearrmod(header, seq, 4, 7);
+		bytearrmod(header, ack, 8, 11);
 		header[12] = (byte)(HLEN << 2);
 		if(URG)
 			header[13] |= 0x20 ;
@@ -88,20 +88,20 @@ public class client
 			if(x == 16)
 				continue ;
 			else
-				checksum += (65535-bytearr_to_int(x, x+1));
+				checksum += (65535-bytearr_to_int(header, x, x+1));
 		}
 		checksum = (~checksum) & 0xffff ;
-		header_mod(checksum, 14, 17);
+		bytearrmod(header, checksum, 14, 17);
 		header[14] = 0 ;
 		header[15] = 0 ;
 	}
 	
-	void receive()
+	static void receive()
 	{
-		src_port = bytearr_to_int(0,1);
-		dest_port = bytearr_to_int(2,3);
-		seq = bytearr_to_int(4,7);
-		ack = bytearr_to_int(8,11);
+		src_port = bytearr_to_int(header, 0,1);
+		dest_port = bytearr_to_int(header, 2,3);
+		seq = bytearr_to_int(header, 4,7);
+		ack = bytearr_to_int(header, 8,11);
 		HLEN = (int)(header[12]>>2);
 		if((header[13]&0x20)>>5 == 1)
 			URG = true ;
@@ -127,12 +127,12 @@ public class client
 			FIN = true ;
 		else
 			FIN = false ;
-		win_size = bytearr_to_int(14,15);
-		checksum = bytearr_to_int(16,17);
-		urg_ptr = bytearr_to_int(18,19);
+		win_size = bytearr_to_int(header, 14,15);
+		checksum = bytearr_to_int(header, 16,17);
+		urg_ptr = bytearr_to_int(header, 18,19);
 	}
 	
-	int calculate_checksum()
+	static int calculate_checksum()
 	{
 		int cs = 0 ;
 		for(int x = 0; x < 20; x += 2)
@@ -140,13 +140,13 @@ public class client
 			if(x == 16)
 				continue ;
 			else
-				cs += (65535-bytearr_to_int(x, x+1));
+				cs += (65535-bytearr_to_int(header, x, x+1));
 		}
 		cs = (~cs) & 0xffff ;
 		return cs ;
 	}
 	
-	void display()
+	static void display()
 	{
 		System.out.println("Source port : " + src_port);
 		System.out.println("Destination port : " + dest_port);
@@ -160,7 +160,7 @@ public class client
 		System.out.print("SYN = " + ((header[13]&0x02)>>1) + " ");
 		System.out.println("FIN = " + ((header[13]&0x01)) + " ");
 		System.out.println("Window size : " + win_size);
-		System.out.println("Checksum : " + checksum);
+		System.out.println("Checksum : " + checksum + " Calculated checksum : " + calculate_checksum());
 		System.out.println("Urgent pointer : " + urg_ptr);
 		if(checksum == calculate_checksum())
 			System.out.println("Checksums match.\n\n");
@@ -168,7 +168,7 @@ public class client
 			System.out.println("Checksums do not match.\n\n");
 	}
 	
-	void pause(int ms)
+	static void pause(int ms)
 	{
 		try
 		{
@@ -180,7 +180,7 @@ public class client
 		}
 	}
 	
-	void start(String i, int p)
+	static void start(String i, int p)
 	{
 		try
 		{
@@ -204,10 +204,10 @@ public class client
 						seq = 0 ;
 						SYN = false ;
 						header[13] &= ~0x02 ;
-						header_mod(seq, 4, 7);
-						header_mod(ack, 8, 11);
+						bytearrmod(header, seq, 4, 7);
+						bytearrmod(header, ack, 8, 11);
 						checksum = calculate_checksum();
-						header_mod(checksum, 14, 17);
+						bytearrmod(header, checksum, 14, 17);
 						pause(1000);
 						out.write(header);
 						System.out.println("TCP connection established.\n\n");
@@ -222,7 +222,7 @@ public class client
 		}
 	}
 	
-	void end()
+	static void end()
 	{
 		try
 		{
@@ -231,10 +231,10 @@ public class client
 			FIN = true ;
 			header[13] |= 0x01 ;
 			header[13] &= ~0x10 ;
-			header_mod(seq, 4, 7);
-			header_mod(ack, 8, 11);
+			bytearrmod(header, seq, 4, 7);
+			bytearrmod(header, ack, 8, 11);
 			checksum = calculate_checksum();
-			header_mod(checksum, 14, 17);
+			bytearrmod(header, checksum, 14, 17);
 			pause(1000);
 			out.write(header);
 			while(true)
@@ -250,7 +250,7 @@ public class client
 						FIN = false ;
 						header[13] &= ~0x01 ;
 						checksum = calculate_checksum();
-						header_mod(checksum, 14, 17);
+						bytearrmod(header, checksum, 14, 17);
 						out.write(header);
 						System.out.println("Terminating TCP connection.\n");
 						pause(TIME_WAIT);
@@ -267,10 +267,32 @@ public class client
 		}
 	}
 	
+	static void extract(byte msg[])
+	{
+		for(int i = 0; i < header.length; i++)
+			header[i] = msg[i];
+	}
+	
 	public static void main(String[] args)
 	{
-		client c = new client("192.168.56.1", 832);
-		c.end();
+		client c = new client("192.168.56.1", 862);
+//		c.end();
+		byte [] server_greeting_message = new byte[84];
+		while(true)
+		{
+			try
+			{
+				in.read(server_greeting_message);
+				extract(server_greeting_message);
+				pause(1000);
+				display();
+				break ;
+			}
+			catch(IOException ioe)
+			{
+				System.out.println("\nServer has disconnected.\n\n");
+			}
+		}
 		int i = sc.nextInt();
 	}
 }
