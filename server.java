@@ -5,7 +5,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.util.Scanner;
-import java.util.Vector;
 import java.util.Random;
 
 public class server
@@ -18,7 +17,7 @@ public class server
 	static Scanner sc = new Scanner(System.in);
 	
 	static Boolean URG, ACK, PSH, RST, SYN, FIN ;
-	static int src_port, dest_port, seq, ack, HLEN, win_size, checksum, urg_ptr ;
+	static int src_port, dest_port, seq, ack, HLEN, win_size, checksum, urg_ptr, temp ;
 	
 	static byte [] header = new byte[20];
 	
@@ -127,9 +126,9 @@ public class server
 		{
 			Thread.sleep(ms);
 		}
-		catch(InterruptedException iioe)
+		catch(InterruptedException ie)
 		{
-			System.out.println(iioe);
+			System.out.println(ie);
 		}
 	}
 	
@@ -155,8 +154,8 @@ public class server
 					{
 						ACK = true ;
 						header[13] |= 0x10 ;
-						ack = seq + 1 ;
-						seq = random.nextInt(Integer.MAX_VALUE);
+						swap(seq, ack);
+						ack++ ;
 						bytearrmod(header, seq, 4, 7);
 						bytearrmod(header, ack, 8, 11);
 						checksum = calculate_checksum();
@@ -193,6 +192,10 @@ public class server
 				in.read(header);
 				if(((header[13]&0x04) >> 2) != 1)
 				{
+					swap(seq, ack);
+					ack++ ;
+					bytearrmod(header, seq, 4, 7);
+					bytearrmod(header, ack, 8, 11);
 					receive();
 					pause(1000);
 					display();
@@ -203,6 +206,8 @@ public class server
 					out.write(header);
 					if(ACK)
 					{
+						in.close();
+						out.close();
 						System.out.println("TCP connection terminated.");
 						socket.close();
 						server.close();
@@ -217,10 +222,16 @@ public class server
 		}
 	}
 	
+	static void swap(int a, int b)
+	{
+		temp = a ;
+		a = b ;
+		b = temp ;
+	}
+	
 	public static void main(String[] args) throws IOException
 	{
 		server s = new server(862);
-//		s.end();
 		byte [] server_greeting = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,								// unused, so leave it
 								   0x00, 0x00, 0x00, 0x01,																				// 1 for unauthenticated, 2 for authenticated, and 4 for encrypted
 								   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,		// challenge, random number
@@ -239,14 +250,14 @@ public class server
 		byte [] server_greeting_message = new byte[header.length+server_greeting.length];
 		header[13] &= ~0x10 ;
 		checksum = calculate_checksum();
-		bytearrmod(header, checksum, 14, 17);
 		for(int i = 0; i < header.length; i++)
 			server_greeting_message[i] = header[i];
 		for(int i = 0; i < server_greeting.length; i++)
 			server_greeting_message[header.length+i] = server_greeting[i];
+		server_greeting_message[13] &= ~0x10 ;
+		checksum = calculate_checksum();
 		bytearrmod(server_greeting_message, checksum, 14, 17);
 		out.write(server_greeting_message);
-		System.out.println(checksum);
 		int i = sc.nextInt();
 	}
 }
