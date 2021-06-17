@@ -15,7 +15,7 @@ public class client
 	static Random random = new Random();
 	
 	static Boolean URG = false, ACK = false, PSH = false, RST = false, SYN = true, FIN = false ;
-	static int src_port = 862, dest_port = 862, seq = random.nextInt(Integer.MAX_VALUE), ack = 0, HLEN = 5, win_size = 0, checksum = 0, urg_ptr = 0, TIME_WAIT = 5000 ;
+	static int src_port = 862, dest_port = 862, seq = 0, ack = 0, HLEN = 5, win_size = 0, checksum = 0, urg_ptr = 0, TIME_WAIT = 5000, temp ;
 	
 	static byte [] header = {0x03, 0x5e,				// source port
 					  		 0x03, 0x5e,				// dest port
@@ -174,9 +174,9 @@ public class client
 		{
 			Thread.sleep(ms);
 		}
-		catch(InterruptedException iioe)
+		catch(InterruptedException ie)
 		{
-			System.out.println(iioe);
+			System.out.println(ie);
 		}
 	}
 	
@@ -200,8 +200,10 @@ public class client
 					display();
 					if(SYN && ACK)
 					{
-						ack = seq + 1 ;
-						seq = 0 ;
+						temp = seq ;
+						seq = ack ;
+						ack = temp ;
+						ack++ ;
 						SYN = false ;
 						header[13] &= ~0x02 ;
 						bytearrmod(header, seq, 4, 7);
@@ -226,8 +228,6 @@ public class client
 	{
 		try
 		{
-			seq = 0 ;
-			ack = 0 ;
 			FIN = true ;
 			header[13] |= 0x01 ;
 			header[13] &= ~0x10 ;
@@ -247,12 +247,18 @@ public class client
 					display();
 					if(ACK)
 					{
+						swap(seq, ack);
+						ack++ ;
+						bytearrmod(header, seq, 4, 7);
+						bytearrmod(header, ack, 8, 11);
 						FIN = false ;
 						header[13] &= ~0x01 ;
 						checksum = calculate_checksum();
 						bytearrmod(header, checksum, 14, 17);
 						out.write(header);
 						System.out.println("Terminating TCP connection.\n");
+						in.close();
+						out.close();
 						pause(TIME_WAIT);
 						System.out.println("TCP connection terminated.");
 						socket.close();
@@ -264,6 +270,7 @@ public class client
 		catch(IOException ioe)
 		{
 			System.out.println("\nServer has disconnected.\n\n");
+			int j = sc.nextInt();
 		}
 	}
 	
@@ -273,17 +280,25 @@ public class client
 			header[i] = msg[i];
 	}
 	
+	static void swap(int a, int b)
+	{
+		temp = a ;
+		a = b ;
+		b = temp ;
+	}
+	
 	public static void main(String[] args)
 	{
 		client c = new client("192.168.56.1", 862);
-//		c.end();
 		byte [] server_greeting_message = new byte[84];
 		while(true)
 		{
 			try
 			{
 				in.read(server_greeting_message);
+				server_greeting_message[13] &= ~0x10 ;
 				extract(server_greeting_message);
+				receive();
 				pause(1000);
 				display();
 				break ;
