@@ -3,7 +3,8 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.nio.ByteBuffer;
-import java.util.Scanner;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Random;
 
 public class client
@@ -11,11 +12,12 @@ public class client
 	static Socket socket = null;
 	static DataInputStream in = null;
 	static DataOutputStream out = null;
-	static Scanner sc = new Scanner(System.in);
 	static Random random = new Random();
+	private static final char[] HEX_ARRAY = "0123456789abcdef".toCharArray();
 	
 	static Boolean URG = false, ACK = false, PSH = false, RST = false, SYN = true, FIN = false ;
 	static int src_port = 862, dest_port = 862, seq = 0, ack = 0, HLEN = 5, win_size = 0, checksum = 0, urg_ptr = 0, TIME_WAIT = 5000, temp ;
+	static long OFFSET = 2208988800L ;
 	
 	static byte [] header = {0x03, 0x5e,				// source port
 					  		 0x03, 0x5e,				// dest port
@@ -163,9 +165,9 @@ public class client
 		System.out.println("Checksum : " + checksum + " Calculated checksum : " + calculate_checksum());
 		System.out.println("Urgent pointer : " + urg_ptr);
 		if(checksum == calculate_checksum())
-			System.out.println("Checksums match.\n\n");
+			System.out.println("Checksums match.");
 		else
-			System.out.println("Checksums do not match.\n\n");
+			System.out.println("Checksums do not match.");
 	}
 	
 	static void pause(int ms)
@@ -198,6 +200,7 @@ public class client
 					receive();
 					pause(1000);
 					display();
+					System.out.println("\n\n");
 					if(SYN && ACK)
 					{
 						temp = seq ;
@@ -247,7 +250,9 @@ public class client
 					display();
 					if(ACK)
 					{
-						swap(seq, ack);
+						temp = seq ;
+						seq = ack ;
+						ack = temp ;
 						ack++ ;
 						bytearrmod(header, seq, 4, 7);
 						bytearrmod(header, ack, 8, 11);
@@ -270,7 +275,6 @@ public class client
 		catch(IOException ioe)
 		{
 			System.out.println("\nServer has disconnected.\n\n");
-			int j = sc.nextInt();
 		}
 	}
 	
@@ -280,34 +284,180 @@ public class client
 			header[i] = msg[i];
 	}
 	
-	static void swap(int a, int b)
+	public static String bytesToHex(byte[] arr, int s, int e)
 	{
-		temp = a ;
-		a = b ;
-		b = temp ;
+	    char[] hexChars = new char[(e-s+1)*2];
+	    for (int j = s; j <= e; j++)
+	    {
+	        int v = arr[j] & 0xFF ;
+	        hexChars[(j-s)*2] = HEX_ARRAY[v >>> 4];
+	        hexChars[(j-s)*2+1] = HEX_ARRAY[v & 0x0F];
+	    }
+	    return new String(hexChars);
 	}
 	
-	public static void main(String[] args)
+	public static void main(String[] args) throws IOException
 	{
 		client c = new client("192.168.56.1", 862);
 		byte [] server_greeting_message = new byte[84];
 		while(true)
 		{
-			try
-			{
-				in.read(server_greeting_message);
-				server_greeting_message[13] &= ~0x10 ;
-				extract(server_greeting_message);
-				receive();
-				pause(1000);
-				display();
-				break ;
-			}
-			catch(IOException ioe)
-			{
-				System.out.println("\nServer has disconnected.\n\n");
-			}
+			in.read(server_greeting_message);
+			extract(server_greeting_message);
+			receive();
+			pause(1000);
+			display();
+			System.out.println("Received server greeting message.");
+			System.out.println("Modes : ");
+			System.out.print("Unauthenticated : ");
+			if((server_greeting_message[35]&0x01) == 0)
+				System.out.println("No");
+			else
+				System.out.println("Yes");
+			System.out.print("Authenticated : ");
+			if((server_greeting_message[35]&0x02) == 0)
+				System.out.println("No");
+			else
+				System.out.println("Yes");
+			System.out.print("Encrypted : ");
+			if((server_greeting_message[35]&0x04) == 0)
+				System.out.println("No");
+			else
+				System.out.println("Yes");
+			System.out.println("Challenge : " + bytesToHex(server_greeting_message, 36, 51));
+			System.out.println("Salt : " + bytesToHex(server_greeting_message, 52, 67));
+			byte [] set_up_response = new byte[184];
+			temp = seq ;
+			seq = ack ;
+			ack = temp ;
+			ack += (server_greeting_message.length-header.length);
+			bytearrmod(header, seq, 4, 7);
+			bytearrmod(header, ack, 8, 11);
+			for(int i = 0; i < header.length; i++)
+				set_up_response[i] = header[i];
+			for(int i = header.length; i < set_up_response.length; i++)
+				set_up_response[i] = 0x00 ;
+			set_up_response[23] = 0x01 ;
+			checksum = calculate_checksum();
+			bytearrmod(set_up_response, checksum, 14, 17);
+			out.write(set_up_response);
+			System.out.println("\n\n");
+			break ;
 		}
-		int i = sc.nextInt();
+		byte [] server_start_message = new byte[68];
+		while(true)
+		{
+			in.read(server_start_message);
+			extract(server_start_message);
+			receive();
+			pause(1000);
+			display();
+			System.out.println("Received server start message.");
+			long sst_int = 0, sst_frac = 0 ;
+			for(int i = 52; i < 56; i++)
+			{
+				if((int)server_start_message[i] >= 0)
+					sst_int = sst_int*256 + server_start_message[i];
+				else
+					sst_int = sst_int*256 + server_start_message[i]+256 ;
+			}
+			for(int i = 56; i < 60; i++)
+			{
+				if((int)server_start_message[i] >= 0)
+					sst_frac = sst_frac*256 + server_start_message[i];
+				else
+					sst_frac = sst_frac*256 + server_start_message[i]+256 ;
+			}
+			Date date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
+			SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm:ss z");
+			sdf.setTimeZone(java.util.TimeZone.getTimeZone("GMT+5:30")); 
+			System.out.println("Server Start Time : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST\n\n");
+			byte [] request_session = {0x05,																								// Request-TW-Session
+									   0x04,																								// IP version
+									   0x00, 0x00,																							// Conf-Sender and Conf-Receiver
+									   0x00, 0x00, 0x00, 0x00,																				// Number of Scheduled Slots
+									   0x00, 0x00, 0x00, 0x00,																				// Number of Packets
+									   0x03, 0x5e,																							// Sender Port
+									   0x03, 0x5e,																							// Receiver Port
+									   (byte) 0xc0, (byte) 0xa8, 0x01, 0x05,																// Sender Address
+									   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,								// MBZ because IPv4
+									   (byte) 0xc0, (byte) 0xa8, 0x01, 0x05,																// Receiver Address
+									   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,								// MBZ because IPv4
+									   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,		// SID
+									   0x00, 0x00, 0x00, 0x00,																				// Padding Length
+									   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,														// start-time
+									   0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00,														// timeout = 5.0 seconds
+									   0x00, 0x00, 0x00, 0x00,																				// Type-P Descriptor
+									   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,														// MBZ
+									   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,		// HMAC (MBZ because of unauthenciated mode)
+									   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};		// HMAC (MBZ because of unauthenciated mode)
+			long temp2 = (long)(System.nanoTime()%1e9);
+			long temp1 = (long)(System.currentTimeMillis()/1000)+OFFSET ;
+			// manually writing timestamp in bytes cause Java sucks, doesn't handle unsigned int
+			request_session[68] = (byte)((temp1 & 0x00000000FF000000L) >> 24);
+			request_session[69] = (byte)((temp1 & 0x0000000000FF0000L) >> 16);
+			request_session[70] = (byte)((temp1 & 0x000000000000FF00L) >> 8);
+			request_session[71] = (byte)((temp1 & 0x00000000000000FFL));
+			request_session[72] = (byte)((temp2 & 0x00000000FF000000L) >> 24);
+			request_session[73] = (byte)((temp2 & 0x0000000000FF0000L) >> 16);
+			request_session[74] = (byte)((temp2 & 0x000000000000FF00L) >> 8);
+			request_session[75] = (byte)((temp2 & 0x00000000000000FFL));
+			byte [] request_session_message = new byte[header.length+request_session.length];
+			temp = seq ;
+			seq = ack ;
+			ack = temp ;
+			ack += (server_start_message.length-header.length);
+			bytearrmod(header, seq, 4, 7);
+			bytearrmod(header, ack, 8, 11);
+			for(int i = 0; i < header.length; i++)
+			request_session_message[i] = header[i];
+			for(int i = 0; i < request_session.length; i++)
+			request_session_message[i+header.length] = request_session[i];
+			checksum = calculate_checksum();
+			bytearrmod(request_session_message, checksum, 14, 17);
+			out.write(request_session_message);
+			break ;
+		}
+		byte [] accept_session_message = new byte[68];
+		while(true)
+		{
+			in.read(accept_session_message);
+			extract(accept_session_message);
+			receive();
+			pause(1000);
+			display();
+			System.out.println("SID : " + bytesToHex(accept_session_message, 24, 40));
+			System.out.println("Received accept session message.\n\n");
+			byte [] start_sessions = new byte[32];
+			for(int i = 0; i < start_sessions.length; i++)
+				start_sessions[i] = 0x00 ;
+			start_sessions[0] = 0x02 ;	// Control Command (start sessions)
+			byte [] start_sessions_message = new byte[header.length+start_sessions.length];
+			temp = seq ;
+			seq = ack ;
+			ack = temp ;
+			ack += (accept_session_message.length-header.length);
+			bytearrmod(header, seq, 4, 7);
+			bytearrmod(header, ack, 8, 11);
+			for(int i = 0; i < header.length; i++)
+				start_sessions_message[i] = header[i];
+			for(int i = 0; i < start_sessions.length; i++)
+				start_sessions_message[i+header.length] = start_sessions[i];
+			checksum = calculate_checksum();
+			bytearrmod(start_sessions_message, checksum, 14, 17);
+			out.write(start_sessions_message);
+			break ;
+		}
+		byte [] start_ack = new byte[52];
+		while(true)
+		{
+			in.read(start_ack);
+			extract(start_ack);
+			receive();
+			pause(1000);
+			display();
+			System.out.println("Start ACK received.\n\n");
+			break ;
+		}
 	}
 }
