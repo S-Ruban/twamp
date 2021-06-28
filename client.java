@@ -198,7 +198,7 @@ public class client
 				if((header[13]&0x01) != 1)
 				{
 					receive();
-					pause(1000);
+					pause(100);
 					display();
 					System.out.println("\n\n");
 					if(SYN && ACK)
@@ -213,7 +213,7 @@ public class client
 						bytearrmod(header, ack, 8, 11);
 						checksum = calculate_checksum();
 						bytearrmod(header, checksum, 14, 17);
-						pause(1000);
+						pause(100);
 						out.write(header);
 						System.out.println("TCP connection established.\n\n");
 					}
@@ -233,12 +233,17 @@ public class client
 		{
 			FIN = true ;
 			header[13] |= 0x01 ;
-			header[13] &= ~0x10 ;
+			header[13] &= ~0x18 ;
+			PSH = false ;
+			temp = seq ;
+			seq = ack ;
+			ack = temp ;
+			ack++ ;
 			bytearrmod(header, seq, 4, 7);
 			bytearrmod(header, ack, 8, 11);
 			checksum = calculate_checksum();
 			bytearrmod(header, checksum, 14, 17);
-			pause(1000);
+			pause(100);
 			out.write(header);
 			while(true)
 			{
@@ -246,7 +251,7 @@ public class client
 				if(((header[13]&0x04) >> 2) != 1)
 				{
 					receive();
-					pause(1000);
+					pause(100);
 					display();
 					if(ACK)
 					{
@@ -261,7 +266,7 @@ public class client
 						checksum = calculate_checksum();
 						bytearrmod(header, checksum, 14, 17);
 						out.write(header);
-						System.out.println("Terminating TCP connection.\n");
+						System.out.println("\n\n\nTerminating TCP connection.\n");
 						in.close();
 						out.close();
 						pause(TIME_WAIT);
@@ -298,14 +303,18 @@ public class client
 	
 	public static void main(String[] args) throws IOException
 	{
-		client c = new client("192.168.56.1", 862);
+		client c = new client("192.168.1.5", 862);
 		byte [] server_greeting_message = new byte[84];
+		long sst_int = 0, sst_frac = 0 ;
+		SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm:ss z");
+		sdf.setTimeZone(java.util.TimeZone.getTimeZone("GMT+5:30")); 
+		Date date = new Date(0);
 		while(true)
 		{
 			in.read(server_greeting_message);
 			extract(server_greeting_message);
 			receive();
-			pause(1000);
+			pause(100);
 			display();
 			System.out.println("Received server greeting message.");
 			System.out.println("Modes : ");
@@ -350,10 +359,9 @@ public class client
 			in.read(server_start_message);
 			extract(server_start_message);
 			receive();
-			pause(1000);
+			pause(100);
 			display();
 			System.out.println("Received server start message.");
-			long sst_int = 0, sst_frac = 0 ;
 			for(int i = 52; i < 56; i++)
 			{
 				if((int)server_start_message[i] >= 0)
@@ -368,8 +376,7 @@ public class client
 				else
 					sst_frac = sst_frac*256 + server_start_message[i]+256 ;
 			}
-			Date date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
-			SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm:ss z");
+			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
 			sdf.setTimeZone(java.util.TimeZone.getTimeZone("GMT+5:30")); 
 			System.out.println("Server Start Time : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST\n\n");
 			byte [] request_session = {0x05,																								// Request-TW-Session
@@ -424,7 +431,7 @@ public class client
 			in.read(accept_session_message);
 			extract(accept_session_message);
 			receive();
-			pause(1000);
+			pause(100);
 			display();
 			System.out.println("SID : " + bytesToHex(accept_session_message, 24, 40));
 			System.out.println("Received accept session message.\n\n");
@@ -454,10 +461,119 @@ public class client
 			in.read(start_ack);
 			extract(start_ack);
 			receive();
-			pause(1000);
+			pause(100);
 			display();
 			System.out.println("Start ACK received.\n\n");
 			break ;
 		}
+		byte [] client_test = new byte[41];
+		int test_seq = 0 ;
+		bytearrmod(client_test, test_seq, 0, 3);
+		long temp2 = (long)(System.nanoTime()%1e9);
+		long temp1 = (long)(System.currentTimeMillis()/1000)+OFFSET ;
+		client_test[4] = (byte)((temp1 & 0x00000000FF000000L) >> 24);
+		client_test[5] = (byte)((temp1 & 0x0000000000FF0000L) >> 16);
+		client_test[6] = (byte)((temp1 & 0x000000000000FF00L) >> 8);
+		client_test[7] = (byte)((temp1 & 0x00000000000000FFL));
+		client_test[8] = (byte)((temp2 & 0x00000000FF000000L) >> 24);
+		client_test[9] = (byte)((temp2 & 0x0000000000FF0000L) >> 16);
+		client_test[10] = (byte)((temp2 & 0x000000000000FF00L) >> 8);
+		client_test[11] = (byte)((temp2 & 0x00000000000000FFL));
+		client_test[12] = (byte)0xb8 ;	// S = 1, Scale = -8
+		client_test[13] = 0x4b ;		// Multiplier = 75
+		for(int i = 14; i < client_test.length; i++)
+			client_test[i] = 0x00 ;
+		byte [] client_test_packet = new byte[client_test.length+8];
+		byte [] server_test_packet = new byte[client_test_packet.length];
+		for(int i = 0; i < 4; i++)
+			client_test_packet[i] = header[i];
+		client_test_packet[4] = 0x00 ;
+		client_test_packet[5] = (byte)(client_test.length+8);
+		client_test_packet[6] = 0x00 ;
+		client_test_packet[7] = 0x00 ;
+		for(int i = 0; i < client_test.length; i++)
+			client_test_packet[i+8] = client_test[i];
+		out.write(client_test_packet);
+		while(true)
+		{
+			in.read(server_test_packet);
+			sst_int = 0 ;
+			sst_frac = 0 ;
+			for(int i = 12; i < 16; i++)
+			{
+				if((int)server_test_packet[i] >= 0)
+					sst_int = sst_int*256 + server_test_packet[i];
+				else
+					sst_int = sst_int*256 + server_test_packet[i]+256 ;
+			}
+			for(int i = 16; i < 20; i++)
+			{
+				if((int)server_test_packet[i] >= 0)
+					sst_frac = sst_frac*256 + server_test_packet[i];
+				else
+					sst_frac = sst_frac*256 + server_test_packet[i]+256 ;
+			}
+			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
+			System.out.println("Timestamp : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST");
+			sst_int = 0 ;
+			sst_frac = 0 ;
+			for(int i = 24; i < 28; i++)
+			{
+				if((int)server_test_packet[i] >= 0)
+					sst_int = sst_int*256 + server_test_packet[i];
+				else
+					sst_int = sst_int*256 + server_test_packet[i]+256 ;
+			}
+			for(int i = 28; i < 32; i++)
+			{
+				if((int)server_test_packet[i] >= 0)
+					sst_frac = sst_frac*256 + server_test_packet[i];
+				else
+					sst_frac = sst_frac*256 + server_test_packet[i]+256 ;
+			}
+			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
+			System.out.println("Receive Timestamp : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST");
+			sst_int = 0 ;
+			sst_frac = 0 ;
+			for(int i = 36; i < 40; i++)
+			{
+				if((int)server_test_packet[i] >= 0)
+					sst_int = sst_int*256 + server_test_packet[i];
+				else
+					sst_int = sst_int*256 + server_test_packet[i]+256 ;
+			}
+			for(int i = 40; i < 44; i++)
+			{
+				if((int)server_test_packet[i] >= 0)
+					sst_frac = sst_frac*256 + server_test_packet[i];
+				else
+					sst_frac = sst_frac*256 + server_test_packet[i]+256 ;
+			}
+			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
+			System.out.println("Sender Timestamp : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST");
+			break ;
+		}
+		byte [] stop_sessions = {0x03,																								// 3 for stop session
+								 0x00,																								// Accept (0 means no errors)
+								 0x00, 0x00,																						// MBZ
+								 0x00, 0x00, 0x00, 0x01,																			// Number of sessions
+								 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,													// MBZ
+								 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};	// HMAC
+		byte [] stop_sessions_command = new byte[stop_sessions.length+header.length];
+		temp = seq ;
+		seq = ack ;
+		ack = temp ;
+		ack += (52-header.length);
+		bytearrmod(header, seq, 4, 7);
+		bytearrmod(header, ack, 8, 11);
+		for(int i = 0; i < header.length; i++)
+			stop_sessions_command[i] = header[i];
+		for(int i = 0; i < stop_sessions.length; i++)
+			stop_sessions_command[i+header.length] = stop_sessions[i];
+		checksum = calculate_checksum();
+		bytearrmod(stop_sessions_command, checksum, 14, 17);
+		out.write(stop_sessions_command);
+		System.out.println("\n\n\nStopping current TWAMP session.\n\n");
+		end();
 	}
 }
