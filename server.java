@@ -15,6 +15,7 @@ public class server
 	static DataInputStream in = null ;
 	static DataOutputStream out = null ;
 	static Random random = new Random();
+	private static final char[] HEX_ARRAY = "0123456789abcdef".toCharArray();
 	
 	static Boolean URG, ACK, PSH, RST, SYN, FIN ;
 	static int src_port, dest_port, seq, ack, HLEN, win_size, checksum, urg_ptr, temp ;
@@ -149,7 +150,7 @@ public class server
 				if((header[13]&0x01) != 1)
 				{
 					receive();
-					pause(1000);
+					pause(100);
 					display();
 					System.out.println("\n\n");
 					if(SYN && !ACK)
@@ -169,14 +170,14 @@ public class server
 					{
 						if(checksum == calculate_checksum())
 						{
-							pause(1000);
+							pause(100);
 							System.out.println("TCP connection established.\n\n");
 							PSH = true ;
 							header[13] |= 0x18 ;
 						}
 						break ;
 					}
-					pause(1000);
+					pause(100);
 					out.write(header);
 				}
 			}
@@ -203,12 +204,13 @@ public class server
 					bytearrmod(header, seq, 4, 7);
 					bytearrmod(header, ack, 8, 11);
 					receive();
-					pause(1000);
+					pause(100);
 					display();
+					System.out.println("\n\n");
 					header[13] |= 0x11 ;
 					checksum = calculate_checksum();
 					bytearrmod(header, checksum, 14, 17);
-					pause(1000);
+					pause(100);
 					out.write(header);
 					if(ACK)
 					{
@@ -234,10 +236,26 @@ public class server
 			header[i] = msg[i];
 	}
 	
+	public static String bytesToHex(byte[] arr, int s, int e)
+	{
+	    char[] hexChars = new char[(e-s+1)*2];
+	    for (int j = s; j <= e; j++)
+	    {
+	        int v = arr[j] & 0xFF ;
+	        hexChars[(j-s)*2] = HEX_ARRAY[v >>> 4];
+	        hexChars[(j-s)*2+1] = HEX_ARRAY[v & 0x0F];
+	    }
+	    return new String(hexChars);
+	}
+	
 	public static void main(String[] args) throws IOException
 	{
 		long temp2 = (long)(System.nanoTime()%1e9);
 		long temp1 = (long)(System.currentTimeMillis()/1000)+OFFSET ;
+		long sst_int = 0, sst_frac = 0 ;
+		SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm:ss z");
+		sdf.setTimeZone(java.util.TimeZone.getTimeZone("GMT+5:30")); 
+		Date date = new Date(0);
 		server s = new server(862);
 		byte [] server_greeting = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,								// unused, so leave it
 								   0x00, 0x00, 0x00, 0x01,																				// 1 for unauthenticated, 2 for authenticated, and 4 for encrypted
@@ -269,7 +287,7 @@ public class server
 			in.read(set_up_response);
 			extract(set_up_response);
 			receive();
-			pause(1000);
+			pause(100);
 			display();
 			System.out.println("Received set-up response.\n\n");
 			break ;
@@ -307,7 +325,7 @@ public class server
 			in.read(request_session_message);
 			extract(request_session_message);
 			receive();
-			pause(1000);
+			pause(100);
 			display();
 			System.out.println("IP Version : IPv" + request_session_message[21]);
 			System.out.println("Sender Port : " + bytearr_to_int(request_session_message, 32, 33));
@@ -320,7 +338,6 @@ public class server
 			for(int i = 52; i < 55; i++)
 				System.out.print(bytearr_to_int(request_session_message, i, i) + ".");
 			System.out.println(bytearr_to_int(request_session_message, 55, 55));
-			long sst_int = 0, sst_frac = 0 ;
 			for(int i = 88; i < 92; i++)
 			{
 				if((int)request_session_message[i] >= 0)
@@ -335,9 +352,7 @@ public class server
 				else
 					sst_frac = sst_frac*256 + request_session_message[i]+256 ;
 			}
-			Date date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
-			SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm:ss z");
-			sdf.setTimeZone(java.util.TimeZone.getTimeZone("GMT+5:30")); 
+			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
 			System.out.println("Start Time : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST");
 			System.out.println("Received request session message.\n\n");
 			byte [] accept_session = new byte[48];
@@ -388,7 +403,7 @@ public class server
 			in.read(start_sessions_message);
 			extract(start_sessions_message);
 			receive();
-			pause(1000);
+			pause(100);
 			display();
 			System.out.println("Start sessions message received.\n\n");
 			byte [] start_ack = new byte[start_sessions_message.length];
@@ -408,5 +423,68 @@ public class server
 			out.write(start_ack);
 			break ;
 		}
+		byte [] client_test_packet = new byte[49];
+		byte [] server_test_packet = new byte[client_test_packet.length];
+		int test_seq ;
+		while(true)
+		{
+			in.read(client_test_packet);
+			temp2 = (long)(System.nanoTime()%1e9);
+			temp1 = (long)(System.currentTimeMillis()/1000)+OFFSET ;
+			// Timestamp of server test packet
+			server_test_packet[12] = (byte)((temp1 & 0x00000000FF000000L) >> 24);
+			server_test_packet[13] = (byte)((temp1 & 0x0000000000FF0000L) >> 16);
+			server_test_packet[14] = (byte)((temp1 & 0x000000000000FF00L) >> 8);
+			server_test_packet[15] = (byte)((temp1 & 0x00000000000000FFL));
+			server_test_packet[16] = (byte)((temp2 & 0x00000000FF000000L) >> 24);
+			server_test_packet[17] = (byte)((temp2 & 0x0000000000FF0000L) >> 16);
+			server_test_packet[18] = (byte)((temp2 & 0x000000000000FF00L) >> 8);
+			server_test_packet[19] = (byte)((temp2 & 0x00000000000000FFL));
+			for(int i = 12; i < 20; i++)
+				server_test_packet[i+12] = server_test_packet[i];					// Receive Timestamp
+			test_seq = bytearr_to_int(client_test_packet, 8, 11);
+			System.out.println("Sequence Number : " + test_seq);
+			sst_int = 0 ;
+			sst_frac = 0;
+			for(int i = 12; i < 16; i++)
+			{
+				if((int)client_test_packet[i] >= 0)
+					sst_int = sst_int*256 + client_test_packet[i];
+				else
+					sst_int = sst_int*256 + client_test_packet[i]+256 ;
+			}
+			for(int i = 16; i < 20; i++)
+			{
+				if((int)client_test_packet[i] >= 0)
+					sst_frac = sst_frac*256 + client_test_packet[i];
+				else
+					sst_frac = sst_frac*256 + client_test_packet[i]+256 ;
+			}
+			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
+			System.out.println("Timestamp : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST\n\n");
+			for(int i = 0; i < 4; i++)
+				server_test_packet[i] = client_test_packet[(i+2)%4];		// exchange source and destination ports in UDP header
+			for(int i = 4; i < 12; i++)
+				server_test_packet[i] = client_test_packet[i];				// copy same UDP packet length, checksum (lite) and sequence number of TWAMP test packet
+			for(int i = 20; i < 24; i++)
+				server_test_packet[i] = client_test_packet[i];				// copy Error Estimate and MBZ
+			for(int i = 8; i < 24; i++)
+				server_test_packet[i+24] = client_test_packet[i];			// copy timestamp in client test packet into Sender Timestamp, along with Error Estimate
+			server_test_packet[server_test_packet.length-1] = (byte)0xff ;	// set TTL to 255
+			out.write(server_test_packet);
+			break ;
+		}
+		byte [] stop_sessions_command = new byte[52];
+		while(true)
+		{
+			in.read(stop_sessions_command);
+			extract(stop_sessions_command);
+			receive();
+			pause(100);
+			display();
+			System.out.println("Stopping current TWAMP session.\n\n");
+			break ;
+		}
+		end();
 	}
 }
