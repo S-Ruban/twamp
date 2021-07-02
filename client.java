@@ -16,8 +16,15 @@ public class client
 	private static final char[] HEX_ARRAY = "0123456789abcdef".toCharArray();
 	
 	static Boolean URG = false, ACK = false, PSH = false, RST = false, SYN = true, FIN = false ;
-	static int src_port = 862, dest_port = 862, seq = 0, ack = 0, HLEN = 5, win_size = 0, checksum = 0, urg_ptr = 0, TIME_WAIT = 5000, temp ;
-	static long OFFSET = 2208988800L ;
+	static int src_port = 862, dest_port = 862, seq = 0, ack = 0, HLEN = 5, win_size = 0, checksum = 0, urg_ptr = 0, TIME_WAIT = 5000, temp, test_seq = 0 ;
+	static long OFFSET = 2208988800L, sst_int = 0, sst_frac = 0, temp1, temp2, t1_int, t1_frac, t2_int, t2_frac ; ;
+	
+	static byte [] client_test = new byte[41];
+	static byte [] server_test_packet = new byte[client_test.length+8];
+	
+	static Date date = new Date(0);
+	static SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm:ss z");
+	
 	
 	static byte [] header = {0x03, 0x5e,				// source port
 					  		 0x03, 0x5e,				// dest port
@@ -289,6 +296,105 @@ public class client
 			header[i] = msg[i];
 	}
 	
+	static void send_test_packet() throws IOException
+	{
+		bytearrmod(client_test, test_seq, 0, 3);
+		test_seq++ ;
+		long temp2 = (long)(System.nanoTime()%1e9);
+		long temp1 = (long)(System.currentTimeMillis()/1000)+OFFSET ;
+		client_test[4] = (byte)((temp1 & 0x00000000FF000000L) >> 24);
+		client_test[5] = (byte)((temp1 & 0x0000000000FF0000L) >> 16);
+		client_test[6] = (byte)((temp1 & 0x000000000000FF00L) >> 8);
+		client_test[7] = (byte)((temp1 & 0x00000000000000FFL));
+		client_test[8] = (byte)((temp2 & 0x00000000FF000000L) >> 24);
+		client_test[9] = (byte)((temp2 & 0x0000000000FF0000L) >> 16);
+		client_test[10] = (byte)((temp2 & 0x000000000000FF00L) >> 8);
+		client_test[11] = (byte)((temp2 & 0x00000000000000FFL));
+		client_test[12] = (byte)0xb8 ;	// S = 1, Scale = -8
+		client_test[13] = 0x4b ;		// Multiplier = 75
+		for(int i = 14; i < client_test.length; i++)
+			client_test[i] = 0x00 ;
+		byte [] client_test_packet = new byte[client_test.length+8];
+		for(int i = 0; i < 4; i++)
+			client_test_packet[i] = header[i];
+		client_test_packet[4] = 0x00 ;
+		client_test_packet[5] = (byte)(client_test.length+8);
+		client_test_packet[6] = 0x00 ;
+		client_test_packet[7] = 0x00 ;
+		for(int i = 0; i < client_test.length; i++)
+			client_test_packet[i+8] = client_test[i];
+		out.write(client_test_packet);
+	}
+	
+	static void receive_test_packet() throws IOException
+	{
+		while(true)
+		{
+			in.read(server_test_packet);
+			sst_int = 0 ;
+			sst_frac = 0 ;
+			for(int i = 12; i < 16; i++)
+			{
+				if((int)server_test_packet[i] >= 0)
+					sst_int = sst_int*256 + server_test_packet[i];
+				else
+					sst_int = sst_int*256 + server_test_packet[i]+256 ;
+			}
+			for(int i = 16; i < 20; i++)
+			{
+				if((int)server_test_packet[i] >= 0)
+					sst_frac = sst_frac*256 + server_test_packet[i];
+				else
+					sst_frac = sst_frac*256 + server_test_packet[i]+256 ;
+			}
+			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
+			System.out.println("Timestamp : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST");
+			t2_int = 0 ;
+			t2_frac = 0 ;
+			for(int i = 24; i < 28; i++)
+			{
+				if((int)server_test_packet[i] >= 0)
+					t2_int = t2_int*256 + server_test_packet[i];
+				else
+					t2_int = t2_int*256 + server_test_packet[i]+256 ;
+			}
+			for(int i = 28; i < 32; i++)
+			{
+				if((int)server_test_packet[i] >= 0)
+					t2_frac = t2_frac*256 + server_test_packet[i];
+				else
+					t2_frac = t2_frac*256 + server_test_packet[i]+256 ;
+			}
+			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
+			System.out.println("Receive Timestamp : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST");
+			t1_int = 0 ;
+			t1_frac = 0 ;
+			for(int i = 36; i < 40; i++)
+			{
+				if((int)server_test_packet[i] >= 0)
+					t1_int = t1_int*256 + server_test_packet[i];
+				else
+					t1_int = t1_int*256 + server_test_packet[i]+256 ;
+			}
+			for(int i = 40; i < 44; i++)
+			{
+				if((int)server_test_packet[i] >= 0)
+					t1_frac = t1_frac*256 + server_test_packet[i];
+				else
+					t1_frac = t1_frac*256 + server_test_packet[i]+256 ;
+			}
+			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
+			System.out.println("Sender Timestamp : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST");
+			if(t2_frac-t1_frac < 1000000 && t1_int == t2_int)
+				System.out.println("time < 1 ms\n\n");
+			else if(t2_int - t1_int < 4)
+				System.out.println("time = "  + (t2_frac-t1_frac)/1000000 + " ms\n\n");
+			else
+				System.out.println("Request timed out\n\n");
+			break ;
+		}
+	}
+	
 	public static String bytesToHex(byte[] arr, int s, int e)
 	{
 	    char[] hexChars = new char[(e-s+1)*2];
@@ -304,11 +410,8 @@ public class client
 	public static void main(String[] args) throws IOException
 	{
 		client c = new client("192.168.1.5", 862);
-		byte [] server_greeting_message = new byte[84];
-		long sst_int = 0, sst_frac = 0 ;
-		SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm:ss z");
 		sdf.setTimeZone(java.util.TimeZone.getTimeZone("GMT+5:30")); 
-		Date date = new Date(0);
+		byte [] server_greeting_message = new byte[84];
 		while(true)
 		{
 			in.read(server_greeting_message);
@@ -398,8 +501,8 @@ public class client
 									   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,														// MBZ
 									   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,		// HMAC (MBZ because of unauthenciated mode)
 									   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};		// HMAC (MBZ because of unauthenciated mode)
-			long temp2 = (long)(System.nanoTime()%1e9);
-			long temp1 = (long)(System.currentTimeMillis()/1000)+OFFSET ;
+			temp2 = (long)(System.nanoTime()%1e9);
+			temp1 = (long)(System.currentTimeMillis()/1000)+OFFSET ;
 			// manually writing timestamp in bytes cause Java sucks, doesn't handle unsigned int
 			request_session[68] = (byte)((temp1 & 0x00000000FF000000L) >> 24);
 			request_session[69] = (byte)((temp1 & 0x0000000000FF0000L) >> 16);
@@ -466,92 +569,10 @@ public class client
 			System.out.println("Start ACK received.\n\n");
 			break ;
 		}
-		byte [] client_test = new byte[41];
-		int test_seq = 0 ;
-		bytearrmod(client_test, test_seq, 0, 3);
-		long temp2 = (long)(System.nanoTime()%1e9);
-		long temp1 = (long)(System.currentTimeMillis()/1000)+OFFSET ;
-		client_test[4] = (byte)((temp1 & 0x00000000FF000000L) >> 24);
-		client_test[5] = (byte)((temp1 & 0x0000000000FF0000L) >> 16);
-		client_test[6] = (byte)((temp1 & 0x000000000000FF00L) >> 8);
-		client_test[7] = (byte)((temp1 & 0x00000000000000FFL));
-		client_test[8] = (byte)((temp2 & 0x00000000FF000000L) >> 24);
-		client_test[9] = (byte)((temp2 & 0x0000000000FF0000L) >> 16);
-		client_test[10] = (byte)((temp2 & 0x000000000000FF00L) >> 8);
-		client_test[11] = (byte)((temp2 & 0x00000000000000FFL));
-		client_test[12] = (byte)0xb8 ;	// S = 1, Scale = -8
-		client_test[13] = 0x4b ;		// Multiplier = 75
-		for(int i = 14; i < client_test.length; i++)
-			client_test[i] = 0x00 ;
-		byte [] client_test_packet = new byte[client_test.length+8];
-		byte [] server_test_packet = new byte[client_test_packet.length];
-		for(int i = 0; i < 4; i++)
-			client_test_packet[i] = header[i];
-		client_test_packet[4] = 0x00 ;
-		client_test_packet[5] = (byte)(client_test.length+8);
-		client_test_packet[6] = 0x00 ;
-		client_test_packet[7] = 0x00 ;
-		for(int i = 0; i < client_test.length; i++)
-			client_test_packet[i+8] = client_test[i];
-		out.write(client_test_packet);
-		while(true)
+		for(int i = 0; i < 10; i++)
 		{
-			in.read(server_test_packet);
-			sst_int = 0 ;
-			sst_frac = 0 ;
-			for(int i = 12; i < 16; i++)
-			{
-				if((int)server_test_packet[i] >= 0)
-					sst_int = sst_int*256 + server_test_packet[i];
-				else
-					sst_int = sst_int*256 + server_test_packet[i]+256 ;
-			}
-			for(int i = 16; i < 20; i++)
-			{
-				if((int)server_test_packet[i] >= 0)
-					sst_frac = sst_frac*256 + server_test_packet[i];
-				else
-					sst_frac = sst_frac*256 + server_test_packet[i]+256 ;
-			}
-			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
-			System.out.println("Timestamp : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST");
-			sst_int = 0 ;
-			sst_frac = 0 ;
-			for(int i = 24; i < 28; i++)
-			{
-				if((int)server_test_packet[i] >= 0)
-					sst_int = sst_int*256 + server_test_packet[i];
-				else
-					sst_int = sst_int*256 + server_test_packet[i]+256 ;
-			}
-			for(int i = 28; i < 32; i++)
-			{
-				if((int)server_test_packet[i] >= 0)
-					sst_frac = sst_frac*256 + server_test_packet[i];
-				else
-					sst_frac = sst_frac*256 + server_test_packet[i]+256 ;
-			}
-			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
-			System.out.println("Receive Timestamp : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST");
-			sst_int = 0 ;
-			sst_frac = 0 ;
-			for(int i = 36; i < 40; i++)
-			{
-				if((int)server_test_packet[i] >= 0)
-					sst_int = sst_int*256 + server_test_packet[i];
-				else
-					sst_int = sst_int*256 + server_test_packet[i]+256 ;
-			}
-			for(int i = 40; i < 44; i++)
-			{
-				if((int)server_test_packet[i] >= 0)
-					sst_frac = sst_frac*256 + server_test_packet[i];
-				else
-					sst_frac = sst_frac*256 + server_test_packet[i]+256 ;
-			}
-			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
-			System.out.println("Sender Timestamp : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST");
-			break ;
+			send_test_packet();
+			receive_test_packet();
 		}
 		byte [] stop_sessions = {0x03,																								// 3 for stop session
 								 0x00,																								// Accept (0 means no errors)
