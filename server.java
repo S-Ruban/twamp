@@ -19,10 +19,10 @@ public class server
 	
 	static Boolean URG, ACK, PSH, RST, SYN, FIN ;
 	static int src_port, dest_port, seq, ack, HLEN, win_size, checksum, urg_ptr, temp, test_seq ;
-	static long OFFSET = 2208988800L, temp1, temp2, sst_int = 0, sst_frac = 0 ;
+	static long OFFSET = 2208988800L, temp1, temp2, sst_int = 0, sst_frac = 0, temp3 ;
 	
 	static Date date = new Date(0);
-	static SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm:ss z");
+	static SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
 	
 	static byte [] header = new byte[20];
 	
@@ -244,8 +244,9 @@ public class server
 			if(c == 10)
 				break ;
 			in.read(client_test_packet);
-			temp2 = (long)(System.nanoTime()%1e9);
-			temp1 = (long)(System.currentTimeMillis()/1000)+OFFSET ;
+			temp3 = (long)(System.currentTimeMillis());
+			temp2 = ((long)(temp3%1e3)*1000000);
+			temp1 = (long)(temp3/1000)+OFFSET ;
 			// Timestamp of server test packet
 			server_test_packet[12] = (byte)((temp1 & 0x00000000FF000000L) >> 24);
 			server_test_packet[13] = (byte)((temp1 & 0x0000000000FF0000L) >> 16);
@@ -276,7 +277,7 @@ public class server
 					sst_frac = sst_frac*256 + client_test_packet[i]+256 ;
 			}
 			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
-			System.out.println("Timestamp : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST\n\n");
+			System.out.println("Timestamp : " + sdf.format(date) + "." + sst_frac/1000000 + " IST\n");
 			for(int i = 0; i < 4; i++)
 				server_test_packet[i] = client_test_packet[(i+2)%4];		// exchange source and destination ports in UDP header
 			for(int i = 4; i < 12; i++)
@@ -312,8 +313,6 @@ public class server
 	
 	public static void main(String[] args) throws IOException
 	{
-		temp2 = (long)(System.nanoTime()%1e9);
-		temp1 = (long)(System.currentTimeMillis()/1000)+OFFSET ;
 		SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm:ss z");
 		sdf.setTimeZone(java.util.TimeZone.getTimeZone("GMT+5:30")); 
 		Date date = new Date(0);
@@ -357,7 +356,9 @@ public class server
 								0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,		// Server-IV (unused in unauthenticated mode)
 								0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,														// timestamp of server start
 								0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};													// MBZ
-		// manually writing timestamp in bytes cause Java sucks, doesn't handle unsigned int
+		temp3 = (long)(System.currentTimeMillis());
+		temp2 = ((long)(temp3%1e3)*1000000);
+		temp1 = (long)(temp3/1000)+OFFSET ;
 		server_start[32] = (byte)((temp1 & 0x00000000FF000000L) >> 24);
 		server_start[33] = (byte)((temp1 & 0x0000000000FF0000L) >> 16);
 		server_start[34] = (byte)((temp1 & 0x000000000000FF00L) >> 8);
@@ -414,7 +415,7 @@ public class server
 					sst_frac = sst_frac*256 + request_session_message[i]+256 ;
 			}
 			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
-			System.out.println("Start Time : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST");
+			System.out.println("Start Time : " + sdf.format(date) + "." + sst_frac/1000000 + " IST");
 			System.out.println("Received request session message.\n\n");
 			byte [] accept_session = new byte[48];
 			accept_session[0] = 0x00 ;	// Accept
@@ -423,9 +424,9 @@ public class server
 				accept_session[i] = request_session_message[i+30];	// Port number
 			for(int i = 4; i < 8; i++)
 				accept_session[i] = request_session_message[i+48];	// IP of generating machine
-			temp2 = (long)(System.nanoTime()%1e9);
-			temp1 = (long)(System.currentTimeMillis()/1000)+OFFSET ;
-			// still disappointed over the fact that Java doesn't handle unsigned values
+			temp3 = (long)(System.currentTimeMillis());
+			temp2 = ((long)(temp3%1e3)*1000000);
+			temp1 = (long)(temp3/1000)+OFFSET ;
 			accept_session[8] = (byte)((temp1 & 0x00000000FF000000L) >> 24);
 			accept_session[9] = (byte)((temp1 & 0x0000000000FF0000L) >> 16);
 			accept_session[10] = (byte)((temp1 & 0x000000000000FF00L) >> 8);
