@@ -16,14 +16,14 @@ public class client
 	private static final char[] HEX_ARRAY = "0123456789abcdef".toCharArray();
 	
 	static Boolean URG = false, ACK = false, PSH = false, RST = false, SYN = true, FIN = false ;
-	static int src_port = 862, dest_port = 862, seq = 0, ack = 0, HLEN = 5, win_size = 0, checksum = 0, urg_ptr = 0, TIME_WAIT = 5000, temp, test_seq = 0 ;
-	static long OFFSET = 2208988800L, sst_int = 0, sst_frac = 0, temp1, temp2, t1_int, t1_frac, t2_int, t2_frac ; ;
+	static int src_port = 862, dest_port = 862, seq = 0, ack = 0, HLEN = 5, win_size = 0, checksum = 0, urg_ptr = 0, TIME_WAIT = 5000, temp, test_seq = 0, packets_sent = 10, packets_lost = 0, glv ;
+	static long OFFSET = 2208988800L, sst_int = 0, sst_frac = 0, temp1, temp2, t1_int, t1_frac, t2_int, t2_frac, temp3, start_int, start_frac, end_int, end_frac ;
 	
 	static byte [] client_test = new byte[41];
 	static byte [] server_test_packet = new byte[client_test.length+8];
 	
 	static Date date = new Date(0);
-	static SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm:ss z");
+	static SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
 	
 	
 	static byte [] header = {0x03, 0x5e,				// source port
@@ -300,8 +300,9 @@ public class client
 	{
 		bytearrmod(client_test, test_seq, 0, 3);
 		test_seq++ ;
-		long temp2 = (long)(System.nanoTime()%1e9);
-		long temp1 = (long)(System.currentTimeMillis()/1000)+OFFSET ;
+		temp3 = (long)(System.currentTimeMillis());
+		temp2 = ((long)(temp3%1e3)*1000000);
+		temp1 = (long)(temp3/1000)+OFFSET ;
 		client_test[4] = (byte)((temp1 & 0x00000000FF000000L) >> 24);
 		client_test[5] = (byte)((temp1 & 0x0000000000FF0000L) >> 16);
 		client_test[6] = (byte)((temp1 & 0x000000000000FF00L) >> 8);
@@ -331,6 +332,7 @@ public class client
 		while(true)
 		{
 			in.read(server_test_packet);
+			System.out.println("Sequence Number : " + bytearr_to_int(server_test_packet, 8, 11));
 			sst_int = 0 ;
 			sst_frac = 0 ;
 			for(int i = 12; i < 16; i++)
@@ -348,7 +350,7 @@ public class client
 					sst_frac = sst_frac*256 + server_test_packet[i]+256 ;
 			}
 			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
-			System.out.println("Timestamp : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST");
+			System.out.println("Timestamp : " + sdf.format(date) + "." + sst_frac/1000000 + " IST");
 			t2_int = 0 ;
 			t2_frac = 0 ;
 			for(int i = 24; i < 28; i++)
@@ -365,8 +367,8 @@ public class client
 				else
 					t2_frac = t2_frac*256 + server_test_packet[i]+256 ;
 			}
-			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
-			System.out.println("Receive Timestamp : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST");
+			date = new Date((t2_int-OFFSET)*1000+(t2_frac/(long)1e6));
+			System.out.println("Receive Timestamp : " + sdf.format(date) + "." + t2_frac/1000000 + " IST");
 			t1_int = 0 ;
 			t1_frac = 0 ;
 			for(int i = 36; i < 40; i++)
@@ -383,14 +385,27 @@ public class client
 				else
 					t1_frac = t1_frac*256 + server_test_packet[i]+256 ;
 			}
-			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
-			System.out.println("Sender Timestamp : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST");
+			date = new Date((t1_int-OFFSET)*1000+(t1_frac/(long)1e6));
+			System.out.println("Sender Timestamp : " + sdf.format(date) + "." + t1_frac/1000000 + " IST");
 			if(t2_frac-t1_frac < 1000000 && t1_int == t2_int)
 				System.out.println("time < 1 ms\n\n");
-			else if(t2_int - t1_int < 4)
+			else if(t2_int - t1_int < 4)	// 4s is defined as the threshold for ping to not timeout (atleast in Windows)
 				System.out.println("time = "  + (t2_frac-t1_frac)/1000000 + " ms\n\n");
 			else
+			{
 				System.out.println("Request timed out\n\n");
+				packets_lost++ ;
+			}
+			if(glv == 0)
+			{
+				start_int = t2_int ;
+				start_frac = t2_frac ;
+			}
+			if(glv == packets_sent-1)
+			{
+				end_int = t2_int ;
+				end_frac = t2_frac ;
+			}
 			break ;
 		}
 	}
@@ -409,7 +424,7 @@ public class client
 	
 	public static void main(String[] args) throws IOException
 	{
-		client c = new client("192.168.1.5", 862);
+		client c = new client("192.168.1.3", 862);
 		sdf.setTimeZone(java.util.TimeZone.getTimeZone("GMT+5:30")); 
 		byte [] server_greeting_message = new byte[84];
 		while(true)
@@ -481,7 +496,7 @@ public class client
 			}
 			date = new Date((sst_int-OFFSET)*1000+(sst_frac/(long)1e6));
 			sdf.setTimeZone(java.util.TimeZone.getTimeZone("GMT+5:30")); 
-			System.out.println("Server Start Time : " + sdf.format(date).substring(0, sdf.format(date).length()-10) + "." + sst_frac + " IST\n\n");
+			System.out.println("Server Start Time : " + sdf.format(date) + "." + sst_frac/1000000 + " IST\n\n");
 			byte [] request_session = {0x05,																								// Request-TW-Session
 									   0x04,																								// IP version
 									   0x00, 0x00,																							// Conf-Sender and Conf-Receiver
@@ -501,8 +516,9 @@ public class client
 									   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,														// MBZ
 									   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,		// HMAC (MBZ because of unauthenciated mode)
 									   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};		// HMAC (MBZ because of unauthenciated mode)
-			temp2 = (long)(System.nanoTime()%1e9);
-			temp1 = (long)(System.currentTimeMillis()/1000)+OFFSET ;
+			temp3 = (long)(System.currentTimeMillis());
+			temp2 = ((long)(temp3%1e3)*1000000);
+			temp1 = (long)(temp3/1000)+OFFSET ;
 			// manually writing timestamp in bytes cause Java sucks, doesn't handle unsigned int
 			request_session[68] = (byte)((temp1 & 0x00000000FF000000L) >> 24);
 			request_session[69] = (byte)((temp1 & 0x0000000000FF0000L) >> 16);
@@ -569,11 +585,13 @@ public class client
 			System.out.println("Start ACK received.\n\n");
 			break ;
 		}
-		for(int i = 0; i < 10; i++)
+		for(glv = 0; glv < packets_sent; glv++)
 		{
 			send_test_packet();
 			receive_test_packet();
 		}
+		System.out.println("Packets: Sent = " + packets_sent + ", Received = " + (packets_sent-packets_lost) + ", Lost = " + packets_lost + " (" + (packets_lost/packets_sent)*100.00 + "% loss)\n");
+		System.out.println("Average Jitter = " + ((end_int*1000+end_frac/1000000)-(start_int*1000+start_frac/1000000))/(packets_sent-1) + " ms");
 		byte [] stop_sessions = {0x03,																								// 3 for stop session
 								 0x00,																								// Accept (0 means no errors)
 								 0x00, 0x00,																						// MBZ
