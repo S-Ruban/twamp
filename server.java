@@ -292,8 +292,7 @@ public class server
 			long_to_bytearr(((long)(temp3%1e3)*1000000), server_test_packet, 16, 19);
 			for(int i = 12; i < 20; i++)
 				server_test_packet[i+12] = server_test_packet[i];					// Receive Timestamp
-			test_seq = bytearr_to_int(client_test_packet, 8, 11);
-			System.out.println("Sequence Number : " + test_seq);
+			System.out.println("Sequence Number : " + bytearr_to_int(client_test_packet, 8, 11));
 //			sst_int = bytearr_to_long(client_test_packet, 12, 15);
 //			sst_frac = bytearr_to_long(client_test_packet, 16, 19);
 			date = new Date((bytearr_to_long(client_test_packet, 12, 15)-OFFSET)*1000+(bytearr_to_long(client_test_packet, 16, 19)/(long)1e6));
@@ -467,7 +466,8 @@ public class server
 		bytearrmod(start_ack, checksum, 14, 17);
 		out.write(start_ack);
 		packets_received = in.readInt();
-		reflect();
+		if(packets_received > 0)
+			reflect();
 		byte [] stop_sessions_command = new byte[52];
 		in.read(stop_sessions_command);
 		extract(stop_sessions_command);

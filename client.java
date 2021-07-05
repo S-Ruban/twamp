@@ -19,7 +19,7 @@ public class client
 	
 	static Boolean URG = false, ACK = false, PSH = false, RST = false, SYN = true, FIN = false ;
 	static int src_port = 862, dest_port = 862, seq = random.nextInt(Short.MAX_VALUE), base_seq, base_ack, ack = 0, HLEN = 5, win_size = 0, checksum = 0, urg_ptr = 0, temp, test_seq = 0, packets_sent, packets_lost = 0, glv ;
-	static long OFFSET = 2208988800L, t1_int, t1_frac, t2_int, t2_frac, temp3, start_int, start_frac, end_int, end_frac, timeout_int = 0, timeout_frac = 0 ;
+	static long OFFSET = 2208988800L, t1_int, t1_frac, t2_int, t2_frac, temp3, start_int, start_frac, end_int, end_frac, timeout_int = 0, timeout_frac = 0, max_rtt = 0, min_rtt = Integer.MAX_VALUE, total_rtt = 0 ;
 	
 	static byte [] client_test = new byte[41];
 	static byte [] server_test_packet = new byte[client_test.length+8];
@@ -387,14 +387,25 @@ public class client
 		date = new Date((bytearr_to_long(server_test_packet, 36, 39)-OFFSET)*1000+(bytearr_to_long(server_test_packet, 40, 43)/(long)1e6));
 		System.out.println("Sender Timestamp : " + sdf.format(date) + "." + String.format("%03d", bytearr_to_long(server_test_packet, 40, 43)/1000000) + " IST");
 		if(bytearr_to_long(server_test_packet, 28, 31)-bytearr_to_long(server_test_packet, 40, 43) < 1000000 && bytearr_to_long(server_test_packet, 36, 39) == bytearr_to_long(server_test_packet, 24, 27))
+		{
 			System.out.println("time < 1 ms\n\n");
+			min_rtt = 0 ;
+		}
 		else if(((bytearr_to_long(server_test_packet, 24, 27)-bytearr_to_long(server_test_packet, 36, 39))*1000+(bytearr_to_long(server_test_packet, 28, 31)-bytearr_to_long(server_test_packet, 40, 43))/1000000) < timeout_int*1000+timeout_frac/1000000)
+		{
 			System.out.println("time = "  + (bytearr_to_long(server_test_packet, 28, 31)-bytearr_to_long(server_test_packet, 40, 43))/1000000 + " ms\n\n");
+			total_rtt += (bytearr_to_long(server_test_packet, 28, 31)-bytearr_to_long(server_test_packet, 40, 43))/1000000 ;
+			if(max_rtt < (bytearr_to_long(server_test_packet, 28, 31)-bytearr_to_long(server_test_packet, 40, 43))/1000000)
+				max_rtt = (bytearr_to_long(server_test_packet, 28, 31)-bytearr_to_long(server_test_packet, 40, 43))/1000000 ;
+			if(min_rtt > (bytearr_to_long(server_test_packet, 28, 31)-bytearr_to_long(server_test_packet, 40, 43))/1000000)
+				min_rtt = (bytearr_to_long(server_test_packet, 28, 31)-bytearr_to_long(server_test_packet, 40, 43))/1000000 ;
+		}
 		else
 		{
 			System.out.println("Request timed out\n\n");
 			packets_lost++ ;
 		}
+		
 		if(glv == 0)
 		{
 			start_int = bytearr_to_long(server_test_packet, 24, 27);
@@ -568,13 +579,21 @@ public class client
 		System.out.print("Enter number of test packets to send : ");
 		packets_sent = sc.nextInt();
 		out.writeInt(packets_sent);
-		for(glv = 0; glv < packets_sent; glv++)
+		if(packets_sent >= 1)
 		{
-			send_test_packet();
-			receive_test_packet();
+			for(glv = 0; glv < packets_sent; glv++)
+			{
+				send_test_packet();
+				receive_test_packet();
+			}
+			System.out.println("    Packets: Sent = " + packets_sent + ", Received = " + (packets_sent-packets_lost) + ", Lost = " + packets_lost + " (" + (packets_lost/packets_sent)*100.00 + "% loss)");
+			System.out.println("Approximate round trip times in milli-seconds:");
+			System.out.println("    Minimum = " + min_rtt + " ms, Maximum = " + max_rtt + " ms, Average = " + (total_rtt/packets_sent) + " ms");
+			if(packets_sent > 1)
+				System.out.println("Average Jitter = " + String.format("%.3f", (float)(((end_int*1000+end_frac/1000000)-(start_int*1000+start_frac/1000000)))/(packets_sent-1)) + " ms");
+			else
+				System.out.println("Cannot calculate jitter for just one test packet sent and received.");
 		}
-		System.out.println("Packets: Sent = " + packets_sent + ", Received = " + (packets_sent-packets_lost) + ", Lost = " + packets_lost + " (" + (packets_lost/packets_sent)*100.00 + "% loss)\n");
-		System.out.println("Average Jitter = " + ((end_int*1000+end_frac/1000000)-(start_int*1000+start_frac/1000000))/(packets_sent-1) + " ms");
 		byte [] stop_sessions = {0x03,																								// 3 for stop session
 								 0x00,																								// Accept (0 means no errors)
 								 0x00, 0x00,																						// MBZ
