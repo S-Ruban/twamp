@@ -24,7 +24,7 @@ public class twamp
 	public static DataOutputStream out = null ;
 	public static ServerSocket server = null ;
 	
-	public static void bytearrmod(byte [] arr, int val, int s, int e)
+	synchronized public static void bytearrmod(byte [] arr, int val, int s, int e)
 	{
 		ByteBuffer bb = ByteBuffer.allocate(e-s+1);
 		bb.putInt(val);
@@ -33,7 +33,7 @@ public class twamp
 			arr[i+s] = temp[i];
 	}
 	
-	public static void bytearrmod(byte [] arr, short val, int s, int e)
+	synchronized public static void bytearrmod(byte [] arr, short val, int s, int e)
 	{
 		ByteBuffer bb = ByteBuffer.allocate(e-s+1);
 		bb.putShort(val);
@@ -42,7 +42,7 @@ public class twamp
 			arr[i+s] = temp[i];
 	}
 	
-	public static void bytearrmod(byte [] arr, long val, int s, int e)
+	synchronized public static void bytearrmod(byte [] arr, long val, int s, int e)
 	{
 		ByteBuffer bb = ByteBuffer.allocate(e-s+1);
 		bb.putLong(val);
@@ -51,7 +51,7 @@ public class twamp
 			arr[i+s] = temp[i];
 	}
 	
-	public static int bytearr_to_int(byte arr[], int s, int e)
+	synchronized public static int bytearr_to_int(byte arr[], int s, int e)
 	{
 		int res = 0 ;
 		for(int i = s; i <= e; i++)
@@ -64,7 +64,7 @@ public class twamp
 		return res ;
 	}
 	
-	public static long bytearr_to_long(byte arr[], int s, int e)
+	synchronized public static long bytearr_to_long(byte arr[], int s, int e)
 	{
 		long res = 0 ;
 		for(int i = s; i <= e; i++)
@@ -77,7 +77,7 @@ public class twamp
 		return res ;
 	}
 	
-	public static void long_to_bytearr(long val, byte [] arr, int s, int e)
+	synchronized public static void long_to_bytearr(long val, byte [] arr, int s, int e)
 	{
 		arr[s] = (byte)((val & 0x00000000ff000000L) >> 24);
 		arr[s+1] = (byte)((val & 0x0000000000ff0000L) >> 16);
@@ -85,13 +85,13 @@ public class twamp
 		arr[s+3] = (byte)((val & 0x00000000000000ffL));
 	}
 	
-	public static void int_to_bytearr(int val, byte [] arr, int s, int e)
+	synchronized public static void int_to_bytearr(int val, byte [] arr, int s, int e)
 	{
 		arr[s] = (byte)((val & 0x0000ff00) >> 8);
 		arr[s+1] = (byte)((val & 0x000000ff));
 	}
 	
-	public static void pause(int ms)
+	synchronized public static void pause(int ms)
 	{
 		try
 		{
@@ -103,7 +103,7 @@ public class twamp
 		}
 	}
 	
-	public static String bytesToHex(byte[] arr, int s, int e)
+	synchronized public static String bytesToHex(byte[] arr, int s, int e)
 	{
 	    char[] hexChars = new char[(e-s+1)*2];
 	    for (int j = s; j <= e; j++)

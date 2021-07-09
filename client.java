@@ -156,10 +156,12 @@ public class client
 			twamp.in = new DataInputStream(twamp.socket.getInputStream());
 			twamp.out = new DataOutputStream(twamp.socket.getOutputStream());
 			header();
+			System.out.println("Request placed in server queue. Wait for queue to free up.\n\n");
 			twamp.out.write(header);
 			while(true)
 			{
 				twamp.in.read(header);
+				System.out.println("Server is now free to process request from this client.\n\n");
 				if((header[13]&0x01) != 1)
 				{
 					receive();
@@ -188,9 +190,9 @@ public class client
 				}
 			}
 		}
-		catch(IOException ioe)
+		catch(Exception e)
 		{
-			System.out.println("\nServer is not online.\n\n");
+			System.out.println("Server is offline.");
 		}
 	}
 	
@@ -244,9 +246,9 @@ public class client
 				}
 			}
 		}
-		catch(IOException ioe)
+		catch(Exception e)
 		{
-			System.out.println("\nServer has disconnected.\n\n");
+			e.printStackTrace();
 		}
 	}
 	

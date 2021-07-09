@@ -1,3 +1,3 @@
 javac client.java
-java client
+java client %ip%
 pause
