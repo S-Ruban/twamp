@@ -11,7 +11,7 @@ public class client
 {	
 	static Boolean URG = false, ACK = false, PSH = false, RST = false, SYN = true, FIN = false ;
 	static int src_port = 862, dest_port = 862, seq = twamp.random.nextInt(Short.MAX_VALUE), base_seq, base_ack, ack = 0, HLEN = 5, win_size = 0, checksum = 0, urg_ptr = 0, temp, test_seq = 0, packets_sent, packets_lost = 0, glv ;
-	static long OFFSET = 2208988800L, t1_int, t1_frac, t2_int, t2_frac, temp3, start_int, start_frac, end_int, end_frac, timeout_int = 0, timeout_frac = 0, max_rtt = 0, min_rtt = Integer.MAX_VALUE, total_rtt = 0 ;
+	static long OFFSET = 2208988800L, t1_int, t1_frac, t2_int, t2_frac, temp3, start_int, start_frac, end_int, end_frac, timeout_int = 0, timeout_frac = 0, max_rtt = 0, min_rtt = Integer.MAX_VALUE, total_rtt = 0, now ;
 	
 	static byte [] client_test = new byte[41];
 	static byte [] server_test_packet = new byte[client_test.length+8];
@@ -284,6 +284,9 @@ public class client
 	static void receive_test_packet() throws IOException
 	{
 		twamp.in.read(server_test_packet);
+		now = System.currentTimeMillis()+(OFFSET*1000);
+//		now_int = now / 1000 ;
+//		now_frac = (now % 1000)*1000000 ;
 		System.out.println("Sequence Number : " + twamp.bytearr_to_int(server_test_packet, 8, 11));
 //		sst_int = bytearr_to_long(server_test_packet, 12, 15);
 //		sst_frac = bytearr_to_long(server_test_packet, 16, 19);
@@ -291,25 +294,25 @@ public class client
 		System.out.println("Timestamp : " + twamp.sdf.format(twamp.date) + "." + String.format("%03d", twamp.bytearr_to_long(server_test_packet, 16, 19)/1000000) + " IST");
 //		t2_int = bytearr_to_long(server_test_packet, 24, 27);
 //		t2_frac = bytearr_to_long(server_test_packet, 28, 31);
-		twamp.date = new Date((twamp.bytearr_to_long(server_test_packet, 24, 27)-OFFSET)*1000+(twamp.bytearr_to_long(server_test_packet, 28, 31)/(long)1e6));
-		System.out.println("Receive Timestamp : " + twamp.sdf.format(twamp.date) + "." + String.format("%03d", twamp.bytearr_to_long(server_test_packet, 28, 31)/1000000) + " IST");
+		twamp.date = new Date((now / 1000-OFFSET)*1000+((now % 1000)*1000000/(long)1e6));
+		System.out.println("Receive Timestamp : " + twamp.sdf.format(twamp.date) + "." + String.format("%03d", (now % 1000)*1000000/1000000) + " IST");
 //		t1_int = bytearr_to_long(server_test_packet, 36, 39);
 //		t1_frac = bytearr_to_long(server_test_packet, 40, 43);
 		twamp.date = new Date((twamp.bytearr_to_long(server_test_packet, 36, 39)-OFFSET)*1000+(twamp.bytearr_to_long(server_test_packet, 40, 43)/(long)1e6));
 		System.out.println("Sender Timestamp : " + twamp.sdf.format(twamp.date) + "." + String.format("%03d", twamp.bytearr_to_long(server_test_packet, 40, 43)/1000000) + " IST");
-		if(twamp.bytearr_to_long(server_test_packet, 28, 31)-twamp.bytearr_to_long(server_test_packet, 40, 43) < 1000000 && twamp.bytearr_to_long(server_test_packet, 36, 39) == twamp.bytearr_to_long(server_test_packet, 24, 27))
+		if((now % 1000)*1000000-twamp.bytearr_to_long(server_test_packet, 40, 43) < 1000000 && twamp.bytearr_to_long(server_test_packet, 36, 39) == now / 1000)
 		{
 			System.out.println("time < 1 ms\n\n");
 			min_rtt = 0 ;
 		}
-		else if(((twamp.bytearr_to_long(server_test_packet, 24, 27)-twamp.bytearr_to_long(server_test_packet, 36, 39))*1000+(twamp.bytearr_to_long(server_test_packet, 28, 31)-twamp.bytearr_to_long(server_test_packet, 40, 43))/1000000) < timeout_int*1000+timeout_frac/1000000)
+		else if(((now / 1000-twamp.bytearr_to_long(server_test_packet, 36, 39))*1000+((now % 1000)*1000000-twamp.bytearr_to_long(server_test_packet, 40, 43))/1000000) < timeout_int*1000+timeout_frac/1000000)
 		{
-			System.out.println("time = "  + (twamp.bytearr_to_long(server_test_packet, 28, 31)-twamp.bytearr_to_long(server_test_packet, 40, 43))/1000000 + " ms\n\n");
-			total_rtt += (twamp.bytearr_to_long(server_test_packet, 28, 31)-twamp.bytearr_to_long(server_test_packet, 40, 43))/1000000 ;
-			if(max_rtt < (twamp.bytearr_to_long(server_test_packet, 28, 31)-twamp.bytearr_to_long(server_test_packet, 40, 43))/1000000)
-				max_rtt = (twamp.bytearr_to_long(server_test_packet, 28, 31)-twamp.bytearr_to_long(server_test_packet, 40, 43))/1000000 ;
-			if(min_rtt > (twamp.bytearr_to_long(server_test_packet, 28, 31)-twamp.bytearr_to_long(server_test_packet, 40, 43))/1000000)
-				min_rtt = (twamp.bytearr_to_long(server_test_packet, 28, 31)-twamp.bytearr_to_long(server_test_packet, 40, 43))/1000000 ;
+			System.out.println("time = "  +  ((now / 1000-twamp.bytearr_to_long(server_test_packet, 36, 39))*1000 +((now % 1000)*1000000-twamp.bytearr_to_long(server_test_packet, 40, 43))/1000000 + " ms\n\n"));
+			total_rtt += ((now / 1000-twamp.bytearr_to_long(server_test_packet, 36, 39))*1000 +((now % 1000)*1000000-twamp.bytearr_to_long(server_test_packet, 40, 43))/1000000);
+			if(max_rtt < ((now / 1000-twamp.bytearr_to_long(server_test_packet, 36, 39))*1000 +((now % 1000)*1000000-twamp.bytearr_to_long(server_test_packet, 40, 43))/1000000))
+				max_rtt = ((now / 1000-twamp.bytearr_to_long(server_test_packet, 36, 39))*1000 +((now % 1000)*1000000-twamp.bytearr_to_long(server_test_packet, 40, 43))/1000000);
+			if(min_rtt > ((now / 1000-twamp.bytearr_to_long(server_test_packet, 36, 39))*1000 +((now % 1000)*1000000-twamp.bytearr_to_long(server_test_packet, 40, 43))/1000000))
+				min_rtt = ((now / 1000-twamp.bytearr_to_long(server_test_packet, 36, 39))*1000 +((now % 1000)*1000000-twamp.bytearr_to_long(server_test_packet, 40, 43))/1000000);
 		}
 		else
 		{
@@ -319,13 +322,13 @@ public class client
 		
 		if(glv == 0)
 		{
-			start_int = twamp.bytearr_to_long(server_test_packet, 24, 27);
-			start_frac = twamp.bytearr_to_long(server_test_packet, 28, 31);
+			start_int = now / 1000 ;
+			start_frac = (now % 1000)*1000000 ;
 		}
 		if(glv == packets_sent-1)
 		{
-			end_int = twamp.bytearr_to_long(server_test_packet, 24, 27);
-			end_frac = twamp.bytearr_to_long(server_test_packet, 28, 31);
+			end_int = now / 1000 ;
+			end_frac = (now % 1000)*1000000 ;
 		}
 	}
 	
